@@ -24,8 +24,11 @@ print('output_sound_index is:',output_sound_index)
 # ===== Kokoro 加载 =====
 original_cwd = os.getcwd()
 sys.path.append(os.path.join(original_cwd, 'audio', 'kokoro'))
-from kokoro import KPipeline
-pipeline = KPipeline(lang_code='z', device="cuda")
+from kokoro import KPipeline,KModel
+model = KModel(config=original_cwd + "/models/Kokoro-82M/config.json",
+                model=original_cwd + "/models/Kokoro-82M/kokoro-v1_0.pth",
+                disable_complex=True)
+pipeline = KPipeline(lang_code='z', device="cuda", model=model)
 VOICE_NAME = "zm_yunxi"
 KOKORO_OFFICIAL_SR = 24000.0
 

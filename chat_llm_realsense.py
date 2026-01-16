@@ -100,7 +100,7 @@ start_time= time.time()
 
 # 切换到sam2工作目录，加载sam
 print('开始加载sam2模型')
-sam_path = original_cwd+'/camera/Grounded-SAM-2'
+sam_path = original_cwd+'/vision/sam2'
 sys.path.append(sam_path)
 from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
