@@ -1,0 +1,27 @@
+不需要docker即可源码安装pyrealsense2
+mkdir build && cd build
+之后
+cmake .. \
+-DFORCE_RSUSB_BACKEND=ON \
+-DCMAKE_BUILD_TYPE=Release \
+-DBUILD_PYTHON_BINDINGS=ON \
+-DPYTHON_EXECUTABLE=$(which python) \
+-DPYTHON_INCLUDE_DIR=$(python -c "from sysconfig import get_paths; print(get_paths()['include'])") \
+-DPYTHON_LIBRARY=$(python -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))") \
+-DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+-DBUILD_EXAMPLES=OFF \
+-DBUILD_GRAPHICAL_EXAMPLES=OFF \
+-DENABLE_OPENCL=OFF \
+-DENABLE_CUDA=ON \
+-DCMAKE_CXX_FLAGS="-DGL_GLEXT_PROTOTYPES -std=c++17" 
+
+其中：
+1.DFORCE_RSUSB_BACKEND=ON来避免USB不识别（重要！！！）
+2.DBUILD_PYTHON_BINDINGS=ON来启用Python绑定
+3.DPYTHON_EXECUTABLE=$(which python)指向conda环境的Python可执行文件（自动获取，避免手动填错）
+4.DPYTHON_INCLUDE_DIR=$(python -c "from sysconfig import get_paths; print(get_paths()['include'])")指向conda环境的Python头文件目录
+5.DPYTHON_LIBRARY=$(python -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))")指向conda环境的Python库目录
+6.DCMAKE_SYSTEM_PROCESSOR=aarch64来适配ARM64架构
+7.DBUILD_EXAMPLES=OFF来关闭无用示例，加速编译
+8.DENABLE_CUDA=ON启用Jetson CUDA（可选）
+9.DCMAKE_CXX_FLAGS="-DGL_GLEXT_PROTOTYPES -std=c++17" 解决Jetson GL链接报错

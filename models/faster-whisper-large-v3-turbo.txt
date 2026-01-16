@@ -1,0 +1,2 @@
+pip install modelscope
+modelscope download --model pengzhendong/faster-whisper-large-v3-turbo --local_dir ./faster-whisper-large-v3-turbo

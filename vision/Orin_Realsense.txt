@@ -1,0 +1,2 @@
+还是无法检测到设备，尝试官方jetson方法https://github.com/realsenseai/librealsense/blob/master/doc/installation_jetson.md
+疑似./scripts/libuvc_installation.sh 之后才能realsense-viewer看到图像，进而能够编译安装

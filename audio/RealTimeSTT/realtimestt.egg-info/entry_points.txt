@@ -1,0 +1,3 @@
+[console_scripts]
+stt = RealtimeSTT_server.stt_cli_client:main
+stt-server = RealtimeSTT_server.stt_server:main

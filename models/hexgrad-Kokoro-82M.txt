@@ -1,0 +1,2 @@
+pip install modelscope
+modelscope download --model hexgrad/Kokoro-82M --local_dir ./Kokoro-82M
