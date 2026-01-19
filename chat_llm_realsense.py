@@ -186,6 +186,8 @@ def get_respose_(model,text,image):
                     # 去掉末尾空白
                     sentence = buffer.strip()
                     if sentence:
+                        print(f"再次判断耗时: {time.time()-start_time}")
+                        start_time = time.time()
                         tts_sound(tts,sentence,"zh")
                         buffer = ""  # 清空缓冲区
 
@@ -214,12 +216,13 @@ def get_respose_(model,text,image):
         entity = json.loads(chunk)
         print('包围框为：',entity)
         tts_sound(tts,"已找到物体","zh")
-    print(f"再次判断耗时: {time.time()-start_time}")
+    
     # entity = stream_message.strip('```json\n').strip('```')
     # print("entity：", entity)
     return entity
 
 def main():
+    cv2.namedWindow("output image", cv2.WINDOW_AUTOSIZE)
     out_image = None
     while True:
         frames = pipeline.wait_for_frames()
@@ -229,12 +232,13 @@ def main():
         if not color_frame or not depth_frame :
             continue
         image = np.asanyarray(color_frame.get_data())
+        out_image = image.copy()
         depth_image = np.asanyarray(depth_frame.get_data())
         # 后续可安全地用此 转换为点云
         depth_intrin = depth_frame.profile.as_video_stream_profile().get_intrinsics()
 
         try:
-            text = stt_queue.get(timeout=0.01)
+            text = stt_queue.get_nowait()
             # 获取包围框
             input_box = get_respose_('Qwen2.5-VL-7B-Instruct',text,image)
             if input_box!=[]:
@@ -264,28 +268,35 @@ def main():
                 cv2.drawContours(image, contours, -1, (0, 0, 255), 2)
                 # 绘制包围框（绿色，线宽2）
                 cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.namedWindow("detection window", cv2.WINDOW_AUTOSIZE)
+                # 强制窗口置顶（某些Linux桌面环境支持）
+                cv2.setWindowProperty("detection window", cv2.WND_PROP_TOPMOST, 1)
+                # -------------------------- 关键步骤：显示并强制刷新 --------------------------
+                cv2.imshow("detection window", image)
+                # 这里的 waitKey 非常关键，它能让系统有时间渲染出这个新窗口
+                cv2.waitKey(1)
                 # 获得该物体的xyz坐标（包围框内掩码的像素点对应的xyz求平均）
-                for u in range(x1,x2+1):
-                    for v in range(y1,y2+1):
-                        depth_val = depth_image[v,u]
-                        if(depth_val > 0 and mask[v,u]):
-                            [x,y,z] = rs.rs2_deproject_pixel_to_point(
-                                depth_intrin, [u, v], depth_val / 1000.0)
-                            # print('物体坐标是：x:',x,'y:',y,'z:',z)
-                            break
-                out_image = image.copy()
+                # for u in range(x1,x2+1):
+                #     for v in range(y1,y2+1):
+                #         depth_val = depth_image[v,u]
+                #         if(depth_val > 0 and mask[v,u]):
+                #             [x,y,z] = rs.rs2_deproject_pixel_to_point(
+                #                 depth_intrin, [u, v], depth_val / 1000.0)
+                #             # print('物体坐标是：x:',x,'y:',y,'z:',z)
+                #             break
+                
         except queue.Empty:
             # 当队列为空时，继续循环而不是抛出异常
             pass
-
         # 显示结果
-        if out_image is not None:
-            cv2.imshow("SAM3 mask in box", out_image)
+        cv2.imshow("output image", out_image)
+        # 给系统 1ms 时间刷新窗口
+        cv2.waitKey(1) 
 
-            key = cv2.waitKey(1)& 0xFF
-            # 按q或者ESC退出
-            if key == ord('q') or key == 27:
-                break
+        key = cv2.waitKey(1)& 0xFF
+        # 按q或者ESC退出
+        if key == ord('q') or key == 27:
+            break
 
 if __name__ == "__main__":
         main()
