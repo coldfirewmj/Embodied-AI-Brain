@@ -85,13 +85,18 @@ if __name__ == "__main__":
     recorder = AudioToTextRecorder(
         model=model_path,
         silero_vad_path=vad_path,
+        post_speech_silence_duration=0.3,
+        beam_size=2,
+        buffer_size=512,
         language="zh",
         compute_type="float16",
+        # gpu_device_index=0,
         device="cuda",
         use_microphone=True,
-        sample_rate=16000,
+        # sample_rate=48000,
         initial_prompt="以下是普通话的句子。",
         input_device_index=input_sound_index,
+        # enable_realtime_transcription=True,
     )
     print(f"✅ Model loaded in {time.time() - start:.2f}s")
 

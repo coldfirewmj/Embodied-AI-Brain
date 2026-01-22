@@ -2,15 +2,17 @@ import os
 import sys
 original_cwd = os.getcwd()
 import time
+from textwrap import dedent
 import requests
+from urllib.parse import urljoin
 import json
-from prompt_build import get_inst_plan,get_inst_chat,get_inst_see,get_inst_find
+from prompt_build import get_inst_plan,get_inst_chat,get_inst_find
 
 import threading
 import uvicorn
 from fastapi import FastAPI, Request
 import queue
-
+import cv2
 # 线程安全队列（推荐）
 stt_queue = queue.Queue(maxsize=5)
 # 接收STT服务器的消息
@@ -81,19 +83,6 @@ sam2_model = build_sam2(CONFIG_SAM, CHECKPOINT_SAM, device="cuda")
 sam_predictor = SAM2ImagePredictor(sam2_model)
 print(f"🎉 加载SAM模型耗时: {time.time() - start_time:.2f} 秒")
 
-# 加载realsense工作目录
-print('开始加载realsense工作目录')
-import pyrealsense2 as rs
-import cv2
-import numpy as np
-# D455相机初始化
-pipeline = rs.pipeline()
-config = rs.config()
-# 配置彩色流（SAM3处理RGB图像）：分辨率640x480，帧率30
-config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-align = rs.align(rs.stream.color)
-pipeline.start(config)
 
 # 启动大模型客户端
 print('开始连接大模型服务')
@@ -104,6 +93,8 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="EMPTY")
 print(f"🎉 加载大模型服务耗时: {time.time() - start_time:.2f} 秒")
 start_time= time.time()
 
+import io
+import numpy as np
 # 合成messages
 def input_messages_build(prompt, image=None):
     print(prompt)
@@ -119,12 +110,10 @@ def input_messages_build(prompt, image=None):
             "content": [text_content],
         }]
     else:
-        # --- 修改部分：先编码为 png 格式 ---
-        # image 是从 realsense 获取的 BGR 数组
-        success, buffer = cv2.imencode('.png', image)
-        if not success:
-            raise ValueError("无法编码图像")
-
+        # 1. 创建一个字节流容器
+        buffer = io.BytesIO()
+        # 2. 将 PIL 图像保存到容器中（指定格式）
+        image.save(buffer, format="PNG")
         # 转换为 base64
         image_b64 = base64.b64encode(buffer).decode("utf-8")
         # 构建图像信息
@@ -146,8 +135,9 @@ sentence_endings = r'[。！？!?；;…\n]'  # 中英文句尾符号
 def get_respose_(model,text,image):
     start_time = time.time()
     # 此处做一个判断，如果是C则聊天，如果是G则抓取，由于接下来如果是C则流式输出的，所以需要先判断
-    prompt = get_inst_plan(text)
-    messages = input_messages_build(prompt)
+    
+    prompt = get_inst_find(text)
+    messages = input_messages_build(prompt, image)
     response = client.chat.completions.create(
         model=model,
         messages=messages,
@@ -155,127 +145,97 @@ def get_respose_(model,text,image):
         extra_body={"mm_processor_kwargs":{"fps": [1]}},
         stream=False,
     )
-    choices = response.choices[0].message.content
-    print("选择的操作类型：", choices)
-    print(f"选择操作耗时: {time.time()-start_time}")
-    start_time = time.time()
-    # 首句打断
-    first = True
-    if choices == 'C':
-        prompt = get_inst_chat(text)
-        messages = input_messages_build(prompt)
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=0.2,
-            extra_body={"mm_processor_kwargs":{"fps": [1]}},
-            stream=True,
-        )
-        buffer = ""
-        for chunk in response:
-            if chunk.choices and chunk.choices[0].delta.content:
-                token = chunk.choices[0].delta.content
-                buffer += token
-                # 检查是否遇到完整句子结尾
-                if re.search(sentence_endings, token):
-                    # 去掉末尾空白
-                    sentence = buffer.strip()
-                    if sentence:
-                        tts_sound(tts,sentence,"zh", first)
-                        if first:
-                            print(f"再次判断耗时: {time.time()-start_time}")
-                            first = False
-                        buffer = ""  # 清空缓冲区
-
-        # 处理最后一句（如果没以句号结尾）
-        if buffer.strip():
-            sentence = buffer.strip()
-            tts_sound(tts,sentence,"zh",False)
+    chunk = response.choices[0].message.content
+    print("回复为：",chunk)
+    print("回复为：",chunk)
+    if chunk is None or chunk == '[]':
+        tts_sound(tts,"未找到物体","zh",True)
         entity = []
-    elif choices == 'S':
-        prompt = get_inst_see(text)
-        messages = input_messages_build(prompt, image)
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=0.2,
-            extra_body={"mm_processor_kwargs":{"fps": [1]}},
-            stream=True,
-        )
-        buffer = ""
-        for chunk in response:
-            if chunk.choices and chunk.choices[0].delta.content:
-                token = chunk.choices[0].delta.content
-                buffer += token
-                # 检查是否遇到完整句子结尾
-                if re.search(sentence_endings, token):
-                    # 去掉末尾空白
-                    sentence = buffer.strip()
-                    if sentence:
-                        tts_sound(tts,sentence,"zh", first)
-                        if first:
-                            print(f"再次判断耗时: {time.time()-start_time}")
-                            first = False
-                        buffer = ""  # 清空缓冲区
-
-        # 处理最后一句（如果没以句号结尾）
-        if buffer.strip():
-            sentence = buffer.strip()
-            tts_sound(tts,sentence,"zh",False)
-        entity = []
-    elif choices == 'G':
-        prompt = get_inst_find(text)
-        messages = input_messages_build(prompt, image)
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=0.2,
-            extra_body={"mm_processor_kwargs":{"fps": [1]}},
-            stream=False,
-        )
-        chunk = response.choices[0].message.content
-        print("回复为：",chunk)
-        if chunk is None or chunk == '[]':
-            tts_sound(tts,"未找到物体","zh",True)
-            entity = []
-            return entity
-        entity = json.loads(chunk)
-        print('包围框为：',entity)
-        tts_sound(tts,"已找到物体","zh",True)
-        print(f"再次判断耗时: {time.time()-start_time}")
+        return entity
+    entity = json.loads(chunk)
+    print('包围框为：',entity)
+    tts_sound(tts,"已找到物体","zh",True)
 
     # entity = stream_message.strip('```json\n').strip('```')
     # print("entity：", entity)
     return entity
 
+
+# 图像线程安全队列（推荐）
+img_queue = queue.Queue(maxsize=1)
+image_app = FastAPI(title="Image Receiver")
+@image_app.post("/api/process_image")
+async def receive_image(request: Request):
+    # 1. 获取 JSON 数据 (注意这里必须使用 await)
+    data = await request.json()
+    image_data = data.get('image')
+
+    # 2. 处理 Base64 数据头
+    if image_data.startswith('data:image'):
+        image_data = image_data.split(',')[1]
+    
+    # 3. 解码 Base64 图像
+    image_bytes = base64.b64decode(image_data)
+    img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+    img_queue.put(img)
+    
+    # 在这里进行图像处理
+    # mask = your_processing_function(img)
+    
+    # 4. 返回响应
+    return {
+        "success": True, 
+        "message": "Image received successfully"
+    }
+
+def send_mask_to_gui(mask_image, gui_url="http://localhost:50052"):
+    """
+    将 mask 发送到 GUI
+    
+    Args:
+        mask_image: PIL Image 对象（灰度模式，L mode）
+        gui_url: GUI 服务器地址
+    """
+    # 转换为 Base64
+    buffered = io.BytesIO()
+    mask_image.save(buffered, format="PNG")
+    mask_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    mask_data = f"data:image/png;base64,{mask_base64}"
+    
+    # 发送请求
+    response = requests.post(
+        f"{gui_url}/external/receive_mask",
+        headers={'Content-Type': 'application/json'},
+        json={'mask_data': mask_data},
+        timeout=10
+    )
+    
+    if response.status_code == 200:
+        result = response.json()
+        if result.get('success'):
+            print("Mask sent successfully")
+        else:
+            print(f"Failed: {result.get('message')}")
+    else:
+        print(f"HTTP Error: {response.status_code}")
+
+
 def main():
+    cv2.namedWindow("output image", cv2.WINDOW_AUTOSIZE)
     out_image = None
     while True:
-        frames = pipeline.wait_for_frames()
-        aligned_frames = align.process(frames)
-        color_frame = aligned_frames.get_color_frame()
-        depth_frame = aligned_frames.get_depth_frame()
-        if not color_frame or not depth_frame :
-            continue
-        image = np.asanyarray(color_frame.get_data())
-        out_image = image.copy()
-        depth_image = np.asanyarray(depth_frame.get_data())
-        # 后续可安全地用此 转换为点云
-        depth_intrin = depth_frame.profile.as_video_stream_profile().get_intrinsics()
 
         try:
+            image = img_queue.get_nowait()
+            out_image = image.copy()
             text = stt_queue.get_nowait()
             # 获取包围框
             input_box = get_respose_('Qwen2.5-VL-7B-Instruct',text,image)
             if input_box!=[]:
                 start_time = time.time()
                 x1, y1, x2, y2 = input_box
-                # 转换为RGB格式
-                img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # SAM3需要RGB格式
                 # -------------------------- SAM3推理 --------------------------
-                # Load an image
-                img_pil = Image.fromarray(img_rgb)
-                inference_state = sam_predictor.set_image(img_pil)
+                inference_state = sam_predictor.set_image(image)
                 masks, scores, _ = sam_predictor.predict(
                     box=input_box,
                     multimask_output=False  # 单mask更高效
@@ -298,7 +258,7 @@ def main():
                 # -------------------------- 关键步骤：显示并强制刷新 --------------------------
                 cv2.imshow("detection window", image)
                 # 这里的 waitKey 非常关键，它能让系统有时间渲染出这个新窗口
-                cv2.waitKey(100)
+                cv2.waitKey(1)
                 # 获得该物体的xyz坐标（包围框内掩码的像素点对应的xyz求平均）
                 # for u in range(x1,x2+1):
                 #     for v in range(y1,y2+1):
@@ -312,18 +272,16 @@ def main():
         except queue.Empty:
             # 当队列为空时，继续循环而不是抛出异常
             pass
-        '''
-        cv2.namedWindow("output image", cv2.WINDOW_AUTOSIZE)
-        # 显示结果
-        cv2.imshow("output image", out_image)
-        # 给系统 1ms 时间刷新窗口
-        cv2.waitKey(1)
+        if out_image:
+            # 显示结果
+            cv2.imshow("output image", out_image)
+            # 给系统 1ms 时间刷新窗口
+            cv2.waitKey(1)
 
-        key = cv2.waitKey(1)& 0xFF
-        # 按q或者ESC退出
-        if key == ord('q') or key == 27:
-            break
-        '''
+            key = cv2.waitKey(1)& 0xFF
+            # 按q或者ESC退出
+            if key == ord('q') or key == 27:
+                break
 
 if __name__ == "__main__":
         main()
