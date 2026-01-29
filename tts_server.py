@@ -15,7 +15,7 @@ from fastapi import FastAPI, Request
 KOKORO_OFFICIAL_SR = 24000.0
 TARGET_SR = 44100
 VOICE_NAME = "zm_yunxi"
-
+os.environ["HF_HUB_OFFLINE"] = "1"
 # ===== 扬声器查找 =====
 def get_output_device_index(target_name='default'):
     devices = sd.query_devices()

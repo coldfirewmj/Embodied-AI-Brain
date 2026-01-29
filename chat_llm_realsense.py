@@ -222,7 +222,7 @@ def get_respose_(model,text,image):
         if buffer.strip():
             sentence = buffer.strip()
             tts_sound(tts,sentence,"zh",False)
-        entity = []
+        entity = None
     elif choices == 'G':
         prompt = get_inst_find(text)
         messages = input_messages_build(prompt, image)
@@ -237,7 +237,7 @@ def get_respose_(model,text,image):
         print("回复为：",chunk)
         if chunk is None or chunk == '[]':
             tts_sound(tts,"未找到物体","zh",True)
-            entity = []
+            entity = None
             return entity
         entity = json.loads(chunk)
         print('包围框为：',entity)
@@ -267,7 +267,11 @@ def main():
             text = stt_queue.get_nowait()
             # 获取包围框
             input_box = get_respose_('Qwen2.5-VL-7B-Instruct',text,image)
-            if input_box!=[]:
+            if input_box is None:
+                cv2.imshow("detection window", image)
+                # 这里的 waitKey 非常关键，它能让系统有时间渲染出这个新窗口
+                cv2.waitKey(100)
+            elif input_box!=[]:
                 start_time = time.time()
                 x1, y1, x2, y2 = input_box
                 # 转换为RGB格式

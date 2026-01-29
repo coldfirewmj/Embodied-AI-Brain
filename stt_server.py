@@ -33,7 +33,7 @@ def optimize_jetson_process():
         print("⚠️ 提示: 请使用 'sudo' 运行以获得最高调度权限")
 
 # ===== 麦克风设备查找 =====
-def get_input_device_index(target_name='PnP'):
+def get_input_device_index(target_name='Wireless'):
     devices = sd.query_devices()
     for idx, dev in enumerate(devices):
         if target_name in dev['name'] and dev['max_input_channels'] > 0:
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     optimize_jetson_process()
 
     # 初始化模型
-    model_path = os.path.join(original_cwd, "Models", "faster-whisper-large-v3-turbo")
+    model_path = os.path.join(original_cwd, "Models", "faster-whisper-medium")
     vad_path = os.path.join(original_cwd, "audio", "snakers4_silero-vad_master")
 
     print("⏳ Loading Whisper model...")
