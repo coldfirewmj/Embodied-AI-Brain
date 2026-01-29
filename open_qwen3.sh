@@ -1,6 +1,7 @@
 # 前期工作：
 # 首先下载docker镜像：
 # docker pull ghcr.io/nvidia-ai-iot/vllm:latest-jetson-orin
+# 如果是jetson thor,则使用docker pull ghcr.io/nvidia-ai-iot/vllm:latest-jetson-thor
 # 其次建立docker：
 # docker run --runtime nvidia -it  \
 #     --name qwen3-vlm \
